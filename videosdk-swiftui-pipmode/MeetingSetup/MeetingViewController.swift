@@ -44,6 +44,11 @@ class MeetingViewController: ObservableObject {
     
     private func setupBackgroundHandling() {
         NotificationCenter.default.addObserver(self,
+                                              selector: #selector(handleWillResignActive),
+                                              name: UIApplication.willResignActiveNotification,
+                                              object: nil)
+
+        NotificationCenter.default.addObserver(self,
                                             selector: #selector(handleEnterBackground),
                                             name: UIApplication.didEnterBackgroundNotification,
                                             object: nil)
@@ -54,6 +59,13 @@ class MeetingViewController: ObservableObject {
                                             object: nil)
     }
     
+    @objc private func handleWillResignActive() {
+        print("App will resign active")
+        if !isPiPActive {
+            startPiP()
+        }
+    }
+
     @objc private func handleEnterBackground() {
         print("App entering background")
         
