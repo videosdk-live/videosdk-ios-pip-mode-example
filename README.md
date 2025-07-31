@@ -45,7 +45,7 @@ Before running the project, ensure you have the following:
 
 1. Launch the app on your device.
 2. Start a video call using the provided UI.
-3. Tap the Enable PiP button to activate Picture-in-Picture mode.
+3. By default, the `startPiP` function will be called automatically in the `initializeMeeting` function to enable PiP mode.
 4. The video window should shrink and remain visible while you switch apps.
 5. PiP mode will turn off when you return to the app from the background where PiP mode was previously active.
 
