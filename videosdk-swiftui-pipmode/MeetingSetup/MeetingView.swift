@@ -89,21 +89,6 @@ struct MeetingView: View{
                             }
                         }
                         HStack{
-                            Button {
-                                meetingViewController.checkPiPStatus()
-                                if meetingViewController.isPiPActive {
-                                    meetingViewController.stopPiP()
-                                } else {
-                                    meetingViewController.startPiP()
-                                }
-                            } label: {
-                                Text(meetingViewController.isPiPActive ? "Disable PiP" : "Enable PiP")
-                                    .foregroundStyle(Color.white)
-                                    .font(.caption)
-                                    .padding()
-                                    .background(RoundedRectangle(cornerRadius: 25).fill(Color.indigo))
-                            }
-
                             // end meeting button
                             Button {
                                 meetingViewController.meeting?.end()

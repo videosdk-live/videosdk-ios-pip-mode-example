@@ -9,76 +9,25 @@ import UIKit
 import AVKit
 import VideoSDKRTC
 
-class PiPVideoCallViewController: AVPictureInPictureVideoCallViewController {
+class PiPVideoCallViewController: NSObject, AVPictureInPictureControllerDelegate {
     private weak var meetingViewController: MeetingViewController?
-    var pipController: AVPictureInPictureController?
+     var pipController: AVPictureInPictureController?
+    private var pipViewController: AVPictureInPictureVideoCallViewController?
     private var containerView: PiPContainerView?
-    
+
     init(meetingViewController: MeetingViewController) {
         self.meetingViewController = meetingViewController
-        super.init(nibName: nil, bundle: nil)
-        loadViewIfNeeded() // Force view to load immediately
-        setupViews()
-        setupPiPController()
-    }
-    
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-    
-    override func viewDidLoad() {
-        super.viewDidLoad()
-    }
-    
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        
-        // Always keep video stream alive in PiP
-        if pipController?.isPictureInPictureActive == true {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.updateVideoTracks()
-            }
-        }
+        super.init()
+        setupContainerView()
     }
 
-    
-    private func setupViews() {
-        containerView = PiPContainerView(frame: view.bounds)
+    private func setupContainerView() {
+        containerView = PiPContainerView(frame: UIScreen.main.bounds)
         if let containerView = containerView {
-            view.addSubview(containerView)
-            containerView.frame = view.bounds
-            containerView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             updateVideoTracks()
         }
     }
-    
-    private func setupPiPController() {
-        guard AVPictureInPictureController.isPictureInPictureSupported() else {
-            print("PiP is not supported on this device")
-            return
-        }
-        
-        // Create PiP controller with proper source view
-        let source = AVPictureInPictureController.ContentSource(
-            activeVideoCallSourceView: containerView ?? view,
-            contentViewController: self
-        )
-        
-        pipController = AVPictureInPictureController(contentSource: source)
-        
-        if let pipController = pipController {
-            pipController.delegate = self
-            pipController.canStartPictureInPictureAutomaticallyFromInline = true
-        } else {
-            print("Failed to create PiP controller")
-        }
-    }
-    
-    override func viewWillLayoutSubviews() {
-        super.viewWillLayoutSubviews()
-        containerView?.frame = view.bounds
-    }
-    
+
     func updateVideoTracks() {
         guard let meetingViewController = meetingViewController,
               let containerView = containerView else { return }
@@ -89,7 +38,6 @@ class PiPVideoCallViewController: AVPictureInPictureVideoCallViewController {
            let localStream = localParticipant.streams.first(where: { $1.kind == .state(value: .video) })?.value,
            let track = localStream.track as? RTCVideoTrack {
             localTrack = track
-            print("Found local track for participant: \(localParticipant.id)")
         }
         
         // Get remote track from the first non-local participant
@@ -98,84 +46,99 @@ class PiPVideoCallViewController: AVPictureInPictureVideoCallViewController {
            let remoteStream = remoteParticipant.streams.first(where: { $1.kind == .state(value: .video) })?.value,
            let track = remoteStream.track as? RTCVideoTrack {
             remoteTrack = track
-            print("Found remote track for participant: \(remoteParticipant.id)")
         }
-        
-        // Update both tracks
+
         containerView.updateVideoTracks(local: localTrack, remote: remoteTrack)
+        
     }
-    
-    func startPiP() {
-        // Ensure PiP controller exists
-        if pipController == nil {
-            setupPiPController()
-        }
-        guard let pipController = pipController else {
-            return
-        }
-        
-        if pipController.isPictureInPictureActive {
-            return
-        }
-        // Ensure we have a video track
-        updateVideoTracks()
-        
-        // Add view to window hierarchy if needed
-        if view.window == nil {
-            print("Adding view to window hierarchy")
-            if let keyWindow = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) {
-                keyWindow.addSubview(view)
-                view.frame = keyWindow.bounds
-                print("Added view to key window")
-            } else {
-                print("No key window found")
+
+    func setupPiP() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self,
+                  AVPictureInPictureController.isPictureInPictureSupported(),
+                  let rootView = UIApplication.shared.connectedScenes
+                      .compactMap({ $0 as? UIWindowScene })
+                      .flatMap({ $0.windows })
+                      .first(where: { $0.isKeyWindow })?.rootViewController?.view,
+                  let containerView = self.containerView else {
+                return
             }
+
+            let pipVC = AVPictureInPictureVideoCallViewController()
+            pipVC.preferredContentSize = CGSize(width: 120, height: 90)
+
+            pipVC.view.addSubview(containerView)
+            containerView.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                containerView.topAnchor.constraint(equalTo: pipVC.view.topAnchor),
+                containerView.bottomAnchor.constraint(equalTo: pipVC.view.bottomAnchor),
+                containerView.leadingAnchor.constraint(equalTo: pipVC.view.leadingAnchor),
+                containerView.trailingAnchor.constraint(equalTo: pipVC.view.trailingAnchor)
+            ])
+
+            let contentSource = AVPictureInPictureController.ContentSource(
+                activeVideoCallSourceView: rootView,
+                contentViewController: pipVC
+            )
+
+            self.pipController = AVPictureInPictureController(contentSource: contentSource)
+            self.pipController?.delegate = self
+            self.pipController?.canStartPictureInPictureAutomaticallyFromInline = true
+            self.pipViewController = pipVC
+
         }
-        
-        // Start PiP with a slight delay to ensure view hierarchy is ready
+    }
+
+    func startPiP() {
+        setupPiP()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self = self else { return }
-            
-            if pipController.isPictureInPicturePossible {
-                print("Starting PiP controller")
-                pipController.startPictureInPicture()
+            if self.pipController?.isPictureInPictureActive == false {
+                self.pipController?.startPictureInPicture()
             }
         }
     }
-    
-    func stopPiP() {
-        guard let pipController = pipController,
-              pipController.isPictureInPictureActive else { return }
-        pipController.stopPictureInPicture()
-        view.removeFromSuperview()
-    }
-}
 
-extension PiPVideoCallViewController: AVPictureInPictureControllerDelegate {
+    func stopPiP() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if self.pipController?.isPictureInPictureActive == true {
+                self.pipController?.stopPictureInPicture()
+            }
+        }
+    }
+
+    // MARK: - AVPictureInPictureControllerDelegate
+    func pictureInPictureControllerDidStopPictureInPicture(_ controller: AVPictureInPictureController) {
+        if let view = self.containerView {
+            view.removeFromSuperview()
+        }
+        pipViewController = nil
+        pipController = nil
+    }
+
     func pictureInPictureControllerWillStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
         meetingViewController?.isPiPActive = true
     }
-    
+
     func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
         meetingViewController?.isPiPActive = true
-        // Re-enable tracks after PiP starts
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.updateVideoTracks()
         }
     }
-    
+
     func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, failedToStartPictureInPictureWithError error: Error) {
         meetingViewController?.isPiPActive = false
-        view.removeFromSuperview()
+        if let view = self.containerView {
+            view.removeFromSuperview()
+        }
+        pipViewController = nil
+        pipController = nil
     }
-    
+
     func pictureInPictureControllerWillStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
         updateVideoTracks()
-    }
-    
-    func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
-        meetingViewController?.isPiPActive = false
-        view.removeFromSuperview()
     }
 }
  

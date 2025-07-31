@@ -23,7 +23,6 @@ class MeetingViewController: ObservableObject {
     @Published var meetingID: String = ""
     
     // for pip
-    var pipController: AVPictureInPictureController?
     private var pipVideoCallViewController: PiPVideoCallViewController?
     @Published var isPiPActive = false
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
@@ -39,6 +38,7 @@ class MeetingViewController: ObservableObject {
         meeting?.join()
         meeting?.addEventListener(self)
         setupBackgroundHandling()
+        startPiP()
 
     }
     
@@ -69,22 +69,16 @@ class MeetingViewController: ObservableObject {
     @objc private func handleEnterBackground() {
         print("App entering background")
         
-        // Start background task
         backgroundTask = UIApplication.shared.beginBackgroundTask { [weak self] in
             self?.endBackgroundTask()
         }
         
-        // Keep video track enabled in background
         if let localParticipant = meeting?.localParticipant {
             localParticipant.enableWebcam()
         }
         
-        // Start PiP if not already active
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            if !self.isPiPActive {
-                self.startPiP()
-            }
+        if !isPiPActive {
+            startPiP()
         }
     }
     
@@ -92,13 +86,12 @@ class MeetingViewController: ObservableObject {
         print("App entering foreground")
         endBackgroundTask()
         
-        // Re-enable video track if needed
         if let localParticipant = meeting?.localParticipant {
             localParticipant.enableWebcam()
         }
         
-        // Update PiP if active
         if isPiPActive {
+            startPiP()
             updatePiPVideoTrack()
         }
     }
@@ -110,25 +103,14 @@ class MeetingViewController: ObservableObject {
         }
     }
     
-    // Add this method to setup PiP
-    func setupPiP() {
-        guard let pipController = pipVideoCallViewController?.pipController else { return }
-        pipController.delegate = pipVideoCallViewController
-    }
-    
+    // MARK: - PiP Integration
+
     func startPiP() {
-        print("startPiP in MeetingView")
-        
-        // Create PiP controller if needed
         if pipVideoCallViewController == nil {
-            print("Creating new PiP controller")
             pipVideoCallViewController = PiPVideoCallViewController(meetingViewController: self)
         }
-        
-        // Start PiP
-        print("Before pipVideoCallViewController startPiP")
-        pipVideoCallViewController?.startPiP()
-        print("After pipVideoCallViewController startPiP")
+        pipVideoCallViewController?.setupPiP()
+        isPiPActive = true
     }
     
     func stopPiP() {
@@ -136,28 +118,8 @@ class MeetingViewController: ObservableObject {
         isPiPActive = false
     }
 
-    func updatePiPLayout() {
-        if isPiPActive {
-            pipVideoCallViewController?.viewWillLayoutSubviews()
-        }
-    }
-
-    // Add this method to check PiP status
-    func checkPiPStatus() {
-        print("Checking PiP status...")
-        print("Is PiP supported: \(AVPictureInPictureController.isPictureInPictureSupported())")
-        if let pipController = pipVideoCallViewController?.pipController {
-            print("Is PiP possible: \(pipController.isPictureInPicturePossible)")
-            print("Is PiP active: \(pipController.isPictureInPictureActive)")
-        } else {
-            print("PiP controller is nil")
-        }
-    }
-
-    // Update this method to handle both local and remote participants
     func updatePiPVideoTrack() {
-        guard let pipVideoCallViewController = pipVideoCallViewController else { return }
-        pipVideoCallViewController.updateVideoTracks()
+        pipVideoCallViewController?.updateVideoTracks()
     }
 }
 
@@ -199,7 +161,7 @@ extension MeetingViewController: MeetingEventListener {
     func onMeetingStateChanged(meetingState: MeetingState) {
         switch meetingState {
 
-        case .CLOSED:
+        case .DISCONNECTED:
             participants.removeAll()
 
         default:
