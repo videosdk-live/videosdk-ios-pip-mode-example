@@ -2,7 +2,9 @@
 
 ## Overview
 
-Picture-in-Picture (PiP) mode allows users to continue a video call while using other apps. This feature is useful for multitasking, such as taking notes or browsing the web during a call.
+Picture-in-Picture (PiP) mode allows users to continue a video call while using other apps. This feature is especially useful for multitasking, such as taking notes, browsing the web, or accessing other tools during a call.
+
+VideoSDK also supports multitasking camera access in PiP mode, enabling the local camera to remain active even while the app runs in the background.
 
 ## Setup Guide
 
@@ -13,7 +15,7 @@ Picture-in-Picture (PiP) mode allows users to continue a video call while using 
 ## Prerequisites
 
 Before running the project, ensure you have the following:
-- iOS 15.0+
+- iOS 16.0+
 - Xcode 15.0+
 - Swift 5.0+
 - Valid [VideoSDK Account](https://app.videosdk.live/signup)
