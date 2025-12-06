@@ -13,7 +13,6 @@ class PiPFrameProcessor: NSObject, RTCVideoRenderer {
     private var currentSize: CGSize = .zero
     private let maxFrameRate: Int32 = 25
     
-    private let frameQueue = DispatchQueue(label: "com.videosdk.rtc.frame", qos: .userInteractive)
     private let processingQueue = DispatchQueue(label: "com.videosdk.rtc.processing", qos: .userInteractive)
     private var frameBuffer: RTCVideoFrame?
     private var isProcessing = false
@@ -50,18 +49,9 @@ class PiPFrameProcessor: NSObject, RTCVideoRenderer {
     func renderFrame(_ frame: RTCVideoFrame?) {
         guard let frame = frame else { return }
         
-        frameQueue.async { [weak self] in
-            self?.processNewFrame(frame)
-        }
-    }
-    
-    private func processNewFrame(_ frame: RTCVideoFrame) {
-        // Store latest frame
-        frameBuffer = frame
-        
-        // Process if not already processing
-        if !isProcessing {
-            processNextFrame()
+        processingQueue.async { [weak self] in
+            self?.frameBuffer = frame
+            self?.processNextFrame()
         }
     }
     
@@ -72,23 +62,18 @@ class PiPFrameProcessor: NSObject, RTCVideoRenderer {
         
         isProcessing = true
         
-        processingQueue.async { [weak self] in
-            guard let self = self else { return }
-            
-            autoreleasepool {
-                if let pixelBuffer = self.getPixelBuffer(from: frame),
-                   let sampleBuffer = self.createSampleBuffer(from: pixelBuffer) {
-                    DispatchQueue.main.async {
-                        displayLayer.enqueue(sampleBuffer)
-                        self.isProcessing = false
-                        // Process next frame if available
-                        if self.frameBuffer !== frame {
-                            self.processNextFrame()
-                        }
-                    }
-                } else {
-                    self.isProcessing = false
+        autoreleasepool {
+            if let pixelBuffer = getPixelBuffer(from: frame),
+               let sampleBuffer = createSampleBuffer(from: pixelBuffer) {
+                DispatchQueue.main.async {
+                    displayLayer.enqueue(sampleBuffer)
                 }
+                isProcessing = false
+                if frameBuffer !== frame {
+                    processNextFrame()
+                }
+            } else {
+                isProcessing = false
             }
         }
     }
